@@ -1,0 +1,46 @@
+# Build output
+dist/
+build/
+*.spec.bak
+
+# PyInstaller
+__pycache__/
+pycache/
+*.pyc
+*.pyo
+*.pyd
+
+# Real config — contains private network data
+config/servers.yaml
+
+# Generated assets — reproducible from source
+assets/
+assets/icon.png
+assets/icon_alert.png
+assets/icon.ico
+pwa/icon-192.png
+pwa/icon-512.png
+
+# Environment and secrets
+.env
+*.env
+pre_fix_hashes.txt
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Test artifacts
+*.bak
+PROJECT_INVENTORY.tsv
+FIX_VERIFICATION.md
+CLEAN_VERIFICATION.md
+GITHUB_PUSH_REPORT.md
+*.tsv
+
+# Local tooling runtime
+python311/
+
+# Local logs
+*.log

@@ -1,0 +1,91 @@
+# Shipyard — servers.yaml template
+# Copy this file to servers.yaml and replace all values with your own.
+# DO NOT commit servers.yaml to git — it contains your private network topology.
+# This template file is safe to share and commit.
+#
+# FIELD REFERENCE:
+#   name:       Display name shown in the tray menu and PWA tile
+#   ip:         IP address or hostname of the container host
+#   port:       Host port the container web UI is exposed on
+#   protocol:   http | https | tcp | udp
+#               tcp and udp entries are shown as disabled/non-clickable
+#               they are included for inventory visibility only
+#   path:       Optional URL path suffix (e.g. /admin)
+#               Leave as "" if not needed
+#   enabled:    true  = shown in tray and PWA
+#               false = hidden from tray, shown as greyed-out in PWA
+#
+# SETTINGS REFERENCE:
+#   pwa_first_run:                   true = open browser on first launch
+#   launch_at_startup:               true = start with Windows
+#   health_check_interval_seconds:   how often to ping all services (10-3600)
+#   health_check_timeout_seconds:    per-request timeout (1-30)
+#   default_protocol:                fallback protocol if not specified
+
+settings:
+  pwa_first_run: true
+  launch_at_startup: true
+  health_check_interval_seconds: 60
+  health_check_timeout_seconds: 5
+  default_protocol: http
+
+servers:
+  - name: MY-SERVER-1
+    applications:
+      - name: My Application
+        ip: 10.0.0.10
+        port: 8080
+        protocol: http
+        path: ""
+        enabled: true
+
+      - name: My Application With Path
+        ip: 10.0.0.11
+        port: 8080
+        protocol: http
+        path: /admin
+        enabled: true
+
+      - name: My HTTPS Application
+        ip: 10.0.0.12
+        port: 443
+        protocol: https
+        path: ""
+        enabled: true
+
+      - name: My Disabled Application
+        ip: 10.0.0.13
+        port: 8080
+        protocol: http
+        path: ""
+        enabled: false
+
+      - name: My TCP Service (No Web UI)
+        ip: 10.0.0.14
+        port: 5432
+        protocol: tcp
+        path: ""
+        enabled: false
+
+      - name: My UDP Service (No Web UI)
+        ip: 10.0.0.15
+        port: 53
+        protocol: udp
+        path: ""
+        enabled: false
+
+  - name: MY-SERVER-2
+    applications:
+      - name: Another Application
+        ip: 10.0.1.10
+        port: 9000
+        protocol: http
+        path: ""
+        enabled: true
+
+      - name: Another HTTPS Application
+        ip: 10.0.1.11
+        port: 443
+        protocol: https
+        path: ""
+        enabled: true
