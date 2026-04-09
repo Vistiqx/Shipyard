@@ -233,6 +233,7 @@ class SettingsDialog(tk.Toplevel):
                 row = tk.Frame(self.app_list_frame, bg=BG)
                 row.pack(fill="x", pady=2)
                 enabled_var = tk.BooleanVar(value=bool(app.get("enabled", True)))
+                endpoint = app.get("url") or f"{app.get('ip')}:{app.get('port')}"
                 tk.Checkbutton(
                     row,
                     variable=enabled_var,
@@ -244,7 +245,7 @@ class SettingsDialog(tk.Toplevel):
                 tk.Label(
                     row,
                     text=(
-                        f"{app.get('name')}  {app.get('ip')}:{app.get('port')}  "
+                        f"{app.get('name')}  {endpoint}  "
                         f"{app.get('protocol')}  path={app.get('path', '')!s}"
                     ),
                     bg=BG,

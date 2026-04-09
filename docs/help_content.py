@@ -66,6 +66,21 @@ HELP_TEXT = [
         "body",
         "Use http/https for browser-accessible web UIs. Use tcp/udp for non-browser services.",
     ),
+    ("heading", "Direct URL (reverse proxy support)"),
+    (
+        "body",
+        "Some applications are not accessed directly by IP and port — they sit behind a reverse proxy such as Traefik and are reached via a domain name URL like https://nextcloud.mydomain.com.\n"
+        "For these applications, set the url field in servers.yaml instead of (or in addition to) ip and port:\n\n"
+        "name: Nextcloud\n"
+        "ip: \"\"\n"
+        "port: 0\n"
+        "protocol: https\n"
+        "path: \"\"\n"
+        "url: https://nextcloud.mydomain.com\n"
+        "enabled: true\n\n"
+        "When url is set, Shipyard uses it directly for both health checks and browser launch. The ip and port fields become optional reference information only.\n"
+        "When url is empty, Shipyard builds the URL from ip + port + path exactly as before. All existing direct-IP applications continue to work without any changes.",
+    ),
     (
         "body",
         "Disabled applications are hidden from the tray menu entirely.",
@@ -165,6 +180,19 @@ HELP_TEXT = [
         "body",
         "Q: Can I use hostnames instead of IP addresses?\n"
         "A: Yes. The IP field accepts any hostname or FQDN that resolves on your network.",
+    ),
+    (
+        "body",
+        "Q: I have applications behind Traefik with domain names. How do I add them?\n"
+        "A: Set the url field to the full domain URL including protocol, for example https://nextcloud.mydomain.com. "
+        "Leave ip and port blank or set them as optional reference. Shipyard will use the url field directly for health "
+        "checks and browser launch.",
+    ),
+    (
+        "body",
+        "Q: Can I mix direct IP applications and proxied URL applications in the same config?\n"
+        "A: Yes. Each application independently uses either url (if set) or ip + port. "
+        "You can have both types in the same server group with no conflict.",
     ),
     (
         "body",

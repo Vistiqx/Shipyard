@@ -25,6 +25,7 @@ pwa/icon-512.png
 .env
 *.env
 pre_fix_hashes.txt
+pre_redesign_hashes.txt
 
 # OS artifacts
 .DS_Store

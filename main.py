@@ -10,6 +10,7 @@ import time
 import traceback
 import webbrowser
 from functools import partial
+from urllib.parse import urlparse
 
 import pystray
 from PIL import Image, ImageDraw
@@ -186,12 +187,26 @@ def _status_symbol(status: str) -> str:
     return {"green": "●", "amber": "◑", "red": "○", "unknown": "·"}.get(status, "·")
 
 
+def _hostname_from_url(url: str) -> str:
+    raw = url.strip()
+    if not raw:
+        return ""
+    parsed = urlparse(raw)
+    if parsed.netloc:
+        return parsed.netloc
+    if raw.startswith("http://"):
+        return raw[len("http://") :].split("/", 1)[0]
+    if raw.startswith("https://"):
+        return raw[len("https://") :].split("/", 1)[0]
+    return raw.split("/", 1)[0]
+
+
 def _any_red(config_data: dict) -> bool:
     for server in config_data.get("servers", []):
         for app in server.get("applications", []):
             if not app.get("enabled", True):
                 continue
-            if health.get_status(str(app.get("ip", "")), int(app.get("port", 80))) == "red":
+            if health.get_status(app) == "red":
                 return True
     return False
 
@@ -200,9 +215,7 @@ def _status_snapshot(config_data: dict) -> dict[str, str]:
     snapshot: dict[str, str] = {}
     for server in config_data.get("servers", []):
         for app in server.get("applications", []):
-            ip = str(app.get("ip", ""))
-            port = int(app.get("port", 80))
-            snapshot[f"{ip}:{port}"] = health.get_status(ip, port)
+            snapshot[config_store.get_endpoint_key(app)] = health.get_status(app)
     return snapshot
 
 
@@ -221,14 +234,16 @@ def build_menu(icon: pystray.Icon, config_data: dict, statuses: dict[str, str]) 
         for app in server.get("applications", []):
             ip = str(app.get("ip", ""))
             port = int(app.get("port", 80))
-            status = statuses.get(f"{ip}:{port}", "unknown")
+            status = statuses.get(config_store.get_endpoint_key(app), "unknown")
             symbol = _status_symbol(status)
             protocol = str(app.get("protocol", "http")).lower()
             enabled = bool(app.get("enabled", True))
-            label = f"{symbol}  {app.get('name', 'Unnamed')}  {ip}:{port}"
-
             app_url = config_store.get_url(app)
-            clickable = enabled and app_url is not None and protocol in {"http", "https"}
+            raw_url = str(app.get("url", "")).strip()
+            endpoint = _hostname_from_url(raw_url) if raw_url else f"{ip}:{port}"
+            label = f"{symbol}  {app.get('name', 'Unnamed')}  {endpoint}"
+
+            clickable = enabled and app_url is not None
             if not enabled:
                 label = f"{label}  (disabled)"
             elif app_url is None:

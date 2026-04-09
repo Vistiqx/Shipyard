@@ -124,7 +124,7 @@ servers:
   - name: MY-SERVER                     # display name shown as a group header
     applications:
       - name: My Application            # display name shown in tray and PWA tile
-        ip: 192.168.1.100               # IP address or hostname of the container host
+        ip: 10.0.0.100                  # IP address or hostname of the container host
         port: 8080                      # host port the web UI is exposed on
         protocol: http                  # http | https | tcp | udp
         path: ""                        # optional URL path suffix e.g. /admin
@@ -159,7 +159,7 @@ TCP and UDP services — such as databases, DNS servers, and RADIUS — are incl
 
 ### Path suffix
 
-Some applications serve their UI at a subpath rather than the root URL. For example, Pi-hole's admin panel lives at `http://192.168.1.229:8053/admin` rather than `http://192.168.1.229:8053`. Set `path: /admin` for these applications and Shipyard will append it automatically when building the URL.
+Some applications serve their UI at a subpath rather than the root URL. For example, Pi-hole's admin panel lives at `http://10.0.0.229:8053/admin` rather than `http://10.0.0.229:8053`. Set `path: /admin` for these applications and Shipyard will append it automatically when building the URL.
 
 ### Adding a new application
 
@@ -315,7 +315,7 @@ After building, confirm no real IP addresses were accidentally bundled:
 python -c "
 with open(r'dist\shipyard.exe', 'rb') as f:
     content = f.read().decode('latin-1')
-for p in ['192.168.1.', '192.168.239.']:
+for p in ['10.0.0.', '10.0.1.']:
     if p in content:
         print(f'FAIL: Found {p} in exe')
     else:

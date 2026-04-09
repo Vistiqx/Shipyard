@@ -12,6 +12,12 @@
 #               they are included for inventory visibility only
 #   path:       Optional URL path suffix (e.g. /admin)
 #               Leave as "" if not needed
+#   url:        Optional. Full URL including protocol, hostname, and path.
+#               When set, this overrides ip + port + path entirely.
+#               Use this for applications behind a reverse proxy or
+#               accessible via a domain name rather than a direct IP.
+#               Example: https://nextcloud.mydomain.com
+#               Leave as "" to use ip + port + path instead.
 #   enabled:    true  = shown in tray and PWA
 #               false = hidden from tray, shown as greyed-out in PWA
 #
@@ -37,13 +43,23 @@ servers:
         port: 8080
         protocol: http
         path: ""
+        url: ""
         enabled: true
 
-      - name: My Application With Path
-        ip: 10.0.0.11
+      - name: My Direct Application
+        ip: 10.0.0.10
         port: 8080
         protocol: http
-        path: /admin
+        path: ""
+        url: ""
+        enabled: true
+
+      - name: My Proxied Application
+        ip: ""
+        port: 0
+        protocol: https
+        path: ""
+        url: https://myapp.mydomain.com
         enabled: true
 
       - name: My HTTPS Application
@@ -51,6 +67,7 @@ servers:
         port: 443
         protocol: https
         path: ""
+        url: ""
         enabled: true
 
       - name: My Disabled Application
@@ -58,6 +75,7 @@ servers:
         port: 8080
         protocol: http
         path: ""
+        url: ""
         enabled: false
 
       - name: My TCP Service (No Web UI)
@@ -65,6 +83,7 @@ servers:
         port: 5432
         protocol: tcp
         path: ""
+        url: ""
         enabled: false
 
       - name: My UDP Service (No Web UI)
@@ -72,6 +91,7 @@ servers:
         port: 53
         protocol: udp
         path: ""
+        url: ""
         enabled: false
 
   - name: MY-SERVER-2
@@ -81,6 +101,7 @@ servers:
         port: 9000
         protocol: http
         path: ""
+        url: ""
         enabled: true
 
       - name: Another HTTPS Application
@@ -88,4 +109,5 @@ servers:
         port: 443
         protocol: https
         path: ""
+        url: ""
         enabled: true

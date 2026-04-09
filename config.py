@@ -1,4 +1,5 @@
 import copy
+import logging
 import os
 import shutil
 import sys
@@ -22,6 +23,7 @@ servers:
         port: 8080
         protocol: http
         path: ""
+        url: ""
         enabled: true
 """
 
@@ -44,6 +46,7 @@ MINIMAL_DEFAULT_CONFIG = {
                     'port': 8080,
                     'protocol': 'http',
                     'path': '',
+                    'url': '',
                     'enabled': True
                 }
             ]
@@ -53,6 +56,7 @@ MINIMAL_DEFAULT_CONFIG = {
 
 
 DEFAULT_CONFIG: dict[str, Any] = MINIMAL_DEFAULT_CONFIG
+LOGGER = logging.getLogger(__name__)
 
 
 def base_path() -> str:
@@ -79,6 +83,13 @@ def write_minimal_default_config(path: str) -> None:
         yaml.safe_dump(copy.deepcopy(DEFAULT_CONFIG), handle, sort_keys=False, allow_unicode=True)
 
 
+def _parse_port(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
 def _normalize_app(app: dict[str, Any], default_protocol: str) -> dict[str, Any]:
     protocol = str(app.get("protocol", default_protocol)).strip().lower()
     if protocol not in {"http", "https", "tcp", "udp"}:
@@ -91,13 +102,31 @@ def _normalize_app(app: dict[str, Any], default_protocol: str) -> dict[str, Any]
     if protocol in {"http", "https"} and path and not path.startswith("/"):
         path = f"/{path}"
 
+    url = app.get("url", "")
+    if url is None:
+        url = ""
+    url = str(url).strip()
+
+    ip = str(app.get("ip", "")).strip()
+    port = _parse_port(app.get("port", 0), default=0)
+    enabled = bool(app.get("enabled", True))
+
+    if not url:
+        if not ip or port < 1 or port > 65535:
+            LOGGER.warning(
+                "Disabling application '%s' due to invalid endpoint (url empty, ip/port invalid).",
+                str(app.get("name", "Unnamed App")).strip() or "Unnamed App",
+            )
+            enabled = False
+
     return {
         "name": str(app.get("name", "Unnamed App")).strip() or "Unnamed App",
-        "ip": str(app.get("ip", "")).strip(),
-        "port": int(app.get("port", 80)),
+        "ip": ip,
+        "port": port,
         "protocol": protocol,
         "path": path,
-        "enabled": bool(app.get("enabled", True)),
+        "url": url,
+        "enabled": enabled,
     }
 
 
@@ -167,19 +196,34 @@ def save_config(config: dict[str, Any]) -> None:
 
 
 def get_url(app: dict[str, Any]) -> str | None:
+    url = str(app.get("url", "")).strip()
+    if url:
+        return url
+
     protocol = str(app.get("protocol", "http")).strip().lower()
-    if protocol not in {"http", "https"}:
+    if protocol in {"tcp", "udp"}:
         return None
 
     ip = str(app.get("ip", "")).strip()
-    port = int(app.get("port", 80))
-    path = app.get("path", "")
-    if path is None or path == "":
-        return f"{protocol}://{ip}:{port}"
-    path = str(path)
-    if not path.startswith("/"):
-        path = f"/{path}"
-    return f"{protocol}://{ip}:{port}{path}"
+    port = _parse_port(app.get("port", 0), default=0)
+    path = str(app.get("path", "")).strip()
+
+    if not ip or not port:
+        return None
+
+    base = f"{protocol}://{ip}:{port}"
+    if path:
+        base += path if path.startswith("/") else f"/{path}"
+    return base
+
+
+def get_endpoint_key(app: dict[str, Any]) -> str:
+    raw_url = str(app.get("url", "")).strip()
+    if raw_url:
+        return f"url:{raw_url}"
+    ip = str(app.get("ip", "")).strip()
+    port = _parse_port(app.get("port", 0), default=0)
+    return f"ip:{ip}:{port}"
 
 
 def add_server(name: str) -> None:

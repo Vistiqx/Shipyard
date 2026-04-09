@@ -3,8 +3,11 @@ import os
 import sys
 import threading
 import tempfile
+import ipaddress
+import re
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import Any
 from urllib.parse import urlparse
 
 import config as config_store
@@ -20,6 +23,7 @@ _HTTPD: ThreadingHTTPServer | None = None
 _LAST_CHECK_UTC: str | None = None
 _STATE_LOCK = threading.Lock()
 _LOG_FILE = os.path.join(tempfile.gettempdir(), "shipyard_server.log")
+_HOSTNAME_PATTERN = re.compile(r"^(?=.{1,253}$)([a-zA-Z0-9][-a-zA-Z0-9]{0,62}\.)*[a-zA-Z0-9][-a-zA-Z0-9]{0,62}$")
 
 
 def _log(message: str) -> None:
@@ -32,6 +36,31 @@ def _log(message: str) -> None:
 
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+def _valid_host(value: str) -> bool:
+    candidate = value.strip()
+    if not candidate:
+        return False
+    try:
+        ipaddress.IPv4Address(candidate)
+        return True
+    except ValueError:
+        return bool(_HOSTNAME_PATTERN.match(candidate))
+
+
+def _valid_app_payload(ip: str, port: int, raw_url: str) -> tuple[bool, str | None]:
+    url = raw_url.strip()
+    if url:
+        if url.startswith("http://") or url.startswith("https://"):
+            return True, None
+        return False, "url must start with http:// or https://"
+
+    if not _valid_host(ip):
+        return False, "ip must be a valid IPv4 address or hostname when url is empty"
+    if port < 1 or port > 65535:
+        return False, "port must be between 1 and 65535 when url is empty"
+    return True, None
 
 
 def _set_last_check() -> None:
@@ -66,11 +95,14 @@ def _status_payload() -> dict:
             is_enabled = bool(app.get("enabled", True))
             protocol = str(app.get("protocol", "http")).lower()
             url = config_store.get_url(app)
-            clickable = is_enabled and protocol in {"http", "https"} and url is not None
+            clickable = is_enabled and url is not None
 
             status = "unknown"
+            response_time_ms = None
             if is_enabled and clickable:
-                status = health.get_status(str(app.get("ip", "")), int(app.get("port", 80)))
+                details = health.get_status_details(app)
+                status = details.get("status", "unknown")
+                response_time_ms = details.get("response_time_ms")
 
             if is_enabled:
                 enabled_count += 1
@@ -90,10 +122,13 @@ def _status_payload() -> dict:
                     "port": app.get("port"),
                     "protocol": protocol,
                     "path": app.get("path", ""),
+                    "raw_url": app.get("url", ""),
+                    "configured_url": app.get("url", ""),
                     "url": url,
                     "enabled": is_enabled,
                     "status": status,
                     "clickable": clickable,
+                    "response_time_ms": response_time_ms,
                 }
             )
         servers_out.append({"name": server.get("name", "Unnamed Server"), "applications": apps_out})
@@ -193,23 +228,37 @@ class ShipyardHandler(BaseHTTPRequestHandler):
         try:
             body = self._read_json_body()
 
+            def _parse_port(value: Any) -> int:
+                try:
+                    return int(value)
+                except (TypeError, ValueError):
+                    return 0
+
             if path == "/api/refresh":
                 _kick_health_check()
                 self._send_json({"status": "ok", "message": "Health check started"})
                 return
 
             if path == "/api/application/add":
-                required = ["server_name", "name", "ip", "port", "protocol", "enabled"]
+                required = ["server_name", "name", "protocol", "enabled"]
                 for key in required:
                     if key not in body:
                         self._send_json({"status": "error", "message": f"Missing field: {key}"}, status=400)
                         return
+                ip = str(body.get("ip", "")).strip()
+                port = _parse_port(body.get("port", 0))
+                raw_url = str(body.get("url", "")).strip()
+                is_valid, message = _valid_app_payload(ip, port, raw_url)
+                if not is_valid:
+                    self._send_json({"status": "error", "message": message}, status=400)
+                    return
                 app = {
                     "name": body["name"],
-                    "ip": body["ip"],
-                    "port": int(body["port"]),
+                    "ip": ip,
+                    "port": port,
                     "protocol": str(body["protocol"]).lower(),
                     "path": body.get("path", ""),
+                    "url": raw_url,
                     "enabled": bool(body.get("enabled", True)),
                 }
                 config_store.add_application(body["server_name"], app)
@@ -223,11 +272,19 @@ class ShipyardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/api/application/edit":
-                required = ["original_name", "original_server", "server_name", "name", "ip", "port", "protocol", "enabled"]
+                required = ["original_name", "original_server", "server_name", "name", "protocol", "enabled"]
                 for key in required:
                     if key not in body:
                         self._send_json({"status": "error", "message": f"Missing field: {key}"}, status=400)
                         return
+
+                ip = str(body.get("ip", "")).strip()
+                port = _parse_port(body.get("port", 0))
+                raw_url = str(body.get("url", "")).strip()
+                is_valid, message = _valid_app_payload(ip, port, raw_url)
+                if not is_valid:
+                    self._send_json({"status": "error", "message": message}, status=400)
+                    return
 
                 cfg = config_store.load_config()
                 found = False
@@ -254,10 +311,11 @@ class ShipyardHandler(BaseHTTPRequestHandler):
                 target_server.setdefault("applications", []).append(
                     {
                         "name": body["name"],
-                        "ip": body["ip"],
-                        "port": int(body["port"]),
+                        "ip": ip,
+                        "port": port,
                         "protocol": str(body["protocol"]).lower(),
                         "path": body.get("path", ""),
+                        "url": raw_url,
                         "enabled": bool(body.get("enabled", True)),
                     }
                 )

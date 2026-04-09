@@ -1,4 +1,5 @@
 import ipaddress
+import re
 import tkinter as tk
 from tkinter import messagebox
 
@@ -27,7 +28,8 @@ def _valid_host(value: str) -> bool:
         ipaddress.IPv4Address(value)
         return True
     except ValueError:
-        return False
+        hostname = re.compile(r"^(?=.{1,253}$)([a-zA-Z0-9][-a-zA-Z0-9]{0,62}\.)*[a-zA-Z0-9][-a-zA-Z0-9]{0,62}$")
+        return bool(hostname.match(value))
 
 
 class AddAppDialog(tk.Toplevel):
@@ -61,10 +63,11 @@ class AddAppDialog(tk.Toplevel):
         self.port_var = tk.StringVar(value=str(self.app_data.get("port", "")))
         self.protocol_var = tk.StringVar(value=self.app_data.get("protocol", "http"))
         self.path_var = tk.StringVar(value=self.app_data.get("path", ""))
+        self.url_var = tk.StringVar(value=self.app_data.get("url", ""))
         self.enabled_var = tk.BooleanVar(value=bool(self.app_data.get("enabled", True)))
 
         self._build_ui()
-        _center_window(self, 430, 360)
+        _center_window(self, 430, 430)
         self.transient(parent)
         self.grab_set()
 
@@ -102,11 +105,8 @@ class AddAppDialog(tk.Toplevel):
         make_label("Port").grid(row=4, column=0, sticky="w", padx=12, pady=(10, 2))
         make_entry(self.port_var).grid(row=5, column=0, columnspan=2, sticky="ew", padx=12)
 
-        make_label("Path suffix (optional)").grid(row=6, column=0, sticky="w", padx=12, pady=(10, 2))
-        make_entry(self.path_var).grid(row=7, column=0, columnspan=2, sticky="ew", padx=12)
-
         protocol_frame = tk.Frame(self, bg=BG)
-        protocol_frame.grid(row=8, column=0, columnspan=2, sticky="w", padx=12, pady=(10, 0))
+        protocol_frame.grid(row=6, column=0, columnspan=2, sticky="w", padx=12, pady=(10, 0))
         tk.Label(protocol_frame, text="Protocol", bg=BG, fg=FG, font=FONT).pack(anchor="w")
         tk.Radiobutton(
             protocol_frame,
@@ -141,6 +141,20 @@ class AddAppDialog(tk.Toplevel):
             activebackground=BG,
             activeforeground=FG,
         ).pack(side="left", padx=(8, 0))
+
+        make_label("Path suffix (optional)").grid(row=7, column=0, sticky="w", padx=12, pady=(10, 2))
+        make_entry(self.path_var).grid(row=8, column=0, columnspan=2, sticky="ew", padx=12)
+
+        make_label("Direct URL (optional)").grid(row=9, column=0, sticky="w", padx=12, pady=(10, 2))
+        make_entry(self.url_var).grid(row=10, column=0, columnspan=2, sticky="ew", padx=12)
+        tk.Label(
+            self,
+            text="Overrides IP + port. Use for apps behind a reverse proxy.",
+            bg=BG,
+            fg="#AFAFC0",
+            font=("Segoe UI", 9),
+            anchor="w",
+        ).grid(row=11, column=0, columnspan=2, sticky="w", padx=12, pady=(4, 0))
         tk.Radiobutton(
             protocol_frame,
             text="udp",
@@ -162,10 +176,10 @@ class AddAppDialog(tk.Toplevel):
             selectcolor="#2A2A3E",
             activebackground=BG,
             activeforeground=FG,
-        ).grid(row=9, column=0, sticky="w", padx=12, pady=(8, 4))
+        ).grid(row=12, column=0, sticky="w", padx=12, pady=(10, 4))
 
         button_frame = tk.Frame(self, bg=BG)
-        button_frame.grid(row=10, column=0, columnspan=2, sticky="e", padx=12, pady=12)
+        button_frame.grid(row=13, column=0, columnspan=2, sticky="e", padx=12, pady=12)
         tk.Button(
             button_frame,
             text="Add Application" if not self.app_data else "Save",
@@ -205,20 +219,34 @@ class AddAppDialog(tk.Toplevel):
         port_raw = self.port_var.get().strip()
         protocol = self.protocol_var.get().strip()
         path = self.path_var.get().strip()
+        url = self.url_var.get().strip()
 
         if not name:
             messagebox.showerror("Validation", "Application name is required.")
             return
-        if not _valid_host(ip):
-            messagebox.showerror("Validation", "Enter a valid IPv4 address.")
-            return
-        try:
-            port = int(port_raw)
-            if port < 1 or port > 65535:
-                raise ValueError
-        except ValueError:
-            messagebox.showerror("Validation", "Port must be an integer between 1 and 65535.")
-            return
+        if url:
+            if not (url.startswith("http://") or url.startswith("https://")):
+                messagebox.showerror("Validation", "Direct URL must start with http:// or https://.")
+                return
+            try:
+                port = int(port_raw) if port_raw else 0
+            except ValueError:
+                messagebox.showerror("Validation", "Port must be an integer between 0 and 65535.")
+                return
+            if port < 0 or port > 65535:
+                messagebox.showerror("Validation", "Port must be an integer between 0 and 65535.")
+                return
+        else:
+            if not ip:
+                messagebox.showerror("Validation", "IP is required when Direct URL is empty.")
+                return
+            try:
+                port = int(port_raw)
+                if port < 1 or port > 65535:
+                    raise ValueError
+            except ValueError:
+                messagebox.showerror("Validation", "Port must be an integer between 1 and 65535.")
+                return
         if protocol not in {"http", "https", "tcp", "udp"}:
             messagebox.showerror("Validation", "Protocol must be http, https, tcp, or udp.")
             return
@@ -231,6 +259,7 @@ class AddAppDialog(tk.Toplevel):
             "port": port,
             "protocol": protocol,
             "path": path,
+            "url": url,
             "enabled": bool(self.enabled_var.get()),
         }
 

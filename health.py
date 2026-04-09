@@ -1,30 +1,45 @@
 import threading
+import time
 from typing import Any, Callable
+from urllib.parse import urlparse
 
 import requests
 import urllib3
 
-from config import get_url
+from config import get_endpoint_key, get_url
 
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-_STATUS_CACHE: dict[str, str] = {}
+_STATUS_CACHE: dict[str, dict[str, Any]] = {}
 _CACHE_LOCK = threading.Lock()
 
 
-def _cache_key(ip: str, port: int) -> str:
-    return f"{ip}:{port}"
+def _cache_key(app: dict[str, Any]) -> str:
+    return get_endpoint_key(app)
 
 
-def get_status(ip: str, port: int) -> str:
+def get_status(app: dict[str, Any]) -> str:
     with _CACHE_LOCK:
-        return _STATUS_CACHE.get(_cache_key(ip, port), "unknown")
+        entry = _STATUS_CACHE.get(_cache_key(app), {})
+        return str(entry.get("status", "unknown"))
 
 
-def _set_status(ip: str, port: int, status: str) -> None:
+def get_status_details(app: dict[str, Any]) -> dict[str, Any]:
     with _CACHE_LOCK:
-        _STATUS_CACHE[_cache_key(ip, port)] = status
+        entry = _STATUS_CACHE.get(_cache_key(app), {})
+        return {
+            "status": str(entry.get("status", "unknown")),
+            "response_time_ms": entry.get("response_time_ms"),
+        }
+
+
+def _set_status(app: dict[str, Any], status: str, response_time_ms: int | None = None) -> None:
+    with _CACHE_LOCK:
+        _STATUS_CACHE[_cache_key(app)] = {
+            "status": status,
+            "response_time_ms": response_time_ms,
+        }
 
 
 def _classify_exception(exc: Exception) -> str:
@@ -48,27 +63,32 @@ def _check_server_apps(apps: list[dict[str, Any]], timeout_seconds: int) -> None
             if not app.get("enabled", True):
                 continue
 
-            ip = str(app.get("ip", ""))
-            port = int(app.get("port", 80))
             url = get_url(app)
             if not url:
-                _set_status(ip, port, "unknown")
+                _set_status(app, "unknown", None)
+                continue
+
+            parsed = urlparse(url)
+            if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+                _set_status(app, "unknown", None)
                 continue
 
             try:
+                start = time.monotonic()
                 response = session.get(url, timeout=timeout_seconds)
+                elapsed_ms = round((time.monotonic() - start) * 1000)
                 if 200 <= response.status_code <= 399:
-                    _set_status(ip, port, "green")
+                    _set_status(app, "green", elapsed_ms)
                 elif 400 <= response.status_code <= 599:
-                    _set_status(ip, port, "amber")
+                    _set_status(app, "amber", elapsed_ms)
                 else:
-                    _set_status(ip, port, "red")
+                    _set_status(app, "red", elapsed_ms)
             except requests.exceptions.Timeout as exc:
-                _set_status(ip, port, _classify_exception(exc))
+                _set_status(app, _classify_exception(exc), None)
             except requests.exceptions.ConnectionError as exc:
-                _set_status(ip, port, _classify_exception(exc))
+                _set_status(app, _classify_exception(exc), None)
             except requests.RequestException as exc:
-                _set_status(ip, port, _classify_exception(exc))
+                _set_status(app, _classify_exception(exc), None)
 
 
 def run_health_checks(config: dict[str, Any], callback: Callable[[], None] | None = None) -> None:
